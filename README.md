@@ -327,6 +327,39 @@ curl -X POST http://localhost:8080/v1/profiles \
   -d '{"profileUrl":"https://www.linkedin.com/in/example/"}'
 ```
 
+#### Test the deployed API with Postman
+
+The reviewer does not need to enter LinkedIn cookies or any authorization token in Postman. The backend owns the LinkedIn session.
+
+1. Create a request with method `GET` and this URL:
+
+   ```text
+   https://your-service.up.railway.app/health
+   ```
+
+   Send it and confirm that the response status is `200` and the body is `{ "status": "ok" }`.
+
+2. Create another request with method `POST` and this URL:
+
+   ```text
+   https://your-service.up.railway.app/v1/profiles
+   ```
+
+3. In the **Authorization** tab, select **No Auth**.
+4. In the **Headers** tab, add `Content-Type: application/json` and `Accept: application/json`.
+5. In **Body**, select **raw**, choose **JSON**, and enter:
+
+   ```json
+   {
+     "profileUrl": "https://www.linkedin.com/in/prajwalchahande/"
+   }
+   ```
+
+6. Select **Send**. A successful request returns status `200` and a normalized profile object.
+7. Send the same request one more time and inspect the response headers. The first successful request normally has `X-Cache: MISS`; the repeated request should have `X-Cache: HIT` while the ten-minute cache entry remains valid.
+
+Do not repeatedly send the request: profile requests count toward the documented local and service-wide limits.
+
 Successful response shape:
 
 ```json
