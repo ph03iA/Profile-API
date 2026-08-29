@@ -236,8 +236,9 @@ class SessionJar {
 			this.addCookie(Object.assign({}, parsed.cookie, {
 				creationOrder: previous ? previous.creationOrder : undefined
 			}));
-			updated = !previous || previous.value !== parsed.cookie.value ||
+			const cookieChanged = !previous || previous.value !== parsed.cookie.value ||
 				previous.expiresAt !== parsed.cookie.expiresAt || previous.secure !== parsed.cookie.secure;
+			updated = updated || cookieChanged;
 		}
 		if (updated)
 			this.persist(false);
