@@ -11,6 +11,8 @@ The response includes name, headline, location, about, experience, education, sk
 - Normalized JSON output independent of LinkedIn's internal graph references
 - Per-section completeness metadata and warnings
 - Bounded response size, request timeout, one-request concurrency guard, and `429` cooldown handling
+- Ten-minute in-memory cache for up to 100 normalized profiles
+- Per-IP limit of 30 profile requests every 15 minutes
 - LinkedIn cookie updates captured in a server-side session jar
 - JSON health and profile endpoints suitable for HTTPS deployment
 
@@ -52,6 +54,7 @@ LINKEDIN_LI_AT='your_li_at_value'
 LINKEDIN_JSESSIONID='your_jsessionid_value_without_surrounding_quotes'
 LINKEDIN_COOKIE_HEADER='the_complete_cookie_request_header'
 LINKEDIN_USER_AGENT='the_complete_user_agent_request_header'
+TRUST_PROXY_HOPS=
 PORT=8080
 ```
 
@@ -61,6 +64,7 @@ PORT=8080
 | `LINKEDIN_JSESSIONID` | Yes | Value of `JSESSIONID`, normally beginning with `ajax:`. Surrounding cookie quotes are optional. |
 | `LINKEDIN_COOKIE_HEADER` | Yes | Complete `Cookie` request-header value from the same successful Voyager request. |
 | `LINKEDIN_USER_AGENT` | Yes | Complete browser `User-Agent` request-header value associated with that session. |
+| `TRUST_PROXY_HOPS` | No | Number of trusted reverse-proxy hops used to identify caller IPs. Use `1` only when the app is behind one trusted proxy. |
 | `PORT` | No | HTTP port. Defaults to `8080`. |
 
 `LINKEDIN_LI_AT` and `LINKEDIN_JSESSIONID` must exactly match their corresponding values inside `LINKEDIN_COOKIE_HEADER`. These values authenticate the LinkedIn account. Never paste them into an issue, log them, or commit `.env`.
@@ -143,6 +147,7 @@ LINKEDIN_LI_AT='value-copied-from-li_at'
 LINKEDIN_JSESSIONID='ajax:value-copied-from-JSESSIONID'
 LINKEDIN_COOKIE_HEADER='bcookie=...; JSESSIONID="ajax:..."; ...; li_at=...; ...'
 LINKEDIN_USER_AGENT='Mozilla/5.0 ...'
+TRUST_PROXY_HOPS=
 PORT=8080
 ```
 
@@ -299,6 +304,18 @@ The URL must:
 - Match `/in/{publicIdentifier}`
 - Not contain credentials, a port, query parameters, or a fragment
 
+Both profile routes share one in-memory limit of 30 requests per IP every 15 minutes, plus a service-wide limit of 100 profile requests per 15 minutes. IPv6 callers are grouped by `/64` subnet. Cache hits and failed requests also count. `/` and `/health` are not limited.
+
+Successful profiles are cached for 10 minutes, up to 100 profiles. The API never caches errors, cookies, request headers, or raw Voyager responses.
+
+Response headers show the current state:
+
+- `X-Cache: MISS` means the API contacted LinkedIn.
+- `X-Cache: HIT` means the API returned a cached normalized profile.
+- `X-RateLimit-Remaining` shows the remaining requests for the caller.
+- `X-RateLimit-Global-Remaining` shows the remaining service-wide requests.
+- `Retry-After` is returned with a local `429` response.
+
 Example request:
 
 ```bash
@@ -429,7 +446,7 @@ Versioned API errors use this shape:
 | --- | --- | --- |
 | `400` | `INVALID_REQUEST`, `INVALID_PROFILE_URL` | Missing or invalid profile URL. |
 | `404` | `PROFILE_NOT_FOUND` | LinkedIn did not expose the requested profile to the backend session. |
-| `429` | `LINKEDIN_THROTTLED` | LinkedIn temporarily limited requests. |
+| `429` | `RATE_LIMITED`, `LINKEDIN_THROTTLED` | The local per-IP allowance was used or LinkedIn asked the service to slow down. |
 | `502` | `UPSTREAM_SCHEMA_CHANGED`, `UPSTREAM_UNAVAILABLE` | Voyager returned an unsupported response or was unavailable. |
 | `503` | `LINKEDIN_SESSION_UNAVAILABLE`, `SERVICE_BUSY` | The session requires attention or another profile request is already running. |
 | `504` | `UPSTREAM_TIMEOUT` | LinkedIn did not respond before the configured timeout. |
@@ -452,6 +469,8 @@ Key modules:
 | --- | --- |
 | `src/VoyagerHttpClient.js` | Direct HTTPS transport, headers, bounds, timeouts, and upstream status handling. |
 | `src/SessionJar.js` | Server-side LinkedIn cookie state and CSRF synchronization. |
+| `src/ProfileCache.js` | Bounded ten-minute cache for normalized profiles. |
+| `src/IpRateLimiter.js` | Bounded per-IP request limiter for profile routes. |
 | `src/voyager/graph.js` | Normalized graph indexing and reference resolution. |
 | `src/voyager/identity.js` | Identity and profile-root extraction. |
 | `src/voyager/sections.js` | Experience, education, skills, certifications, and languages. |
@@ -466,10 +485,11 @@ For Railway or a comparable Node.js host:
 1. Deploy this GitHub repository as a service.
 2. Use `npm start` as the start command.
 3. Add the four required LinkedIn values as service variables; seal them when the platform supports sealed variables.
-4. Expose the application port supplied through `PORT`.
-5. Use `/health` for liveness checks.
-6. Do not attach persistent storage for `.sessions` unless persistence is explicitly required and separately protected.
-7. Verify `POST /v1/profiles` through the public HTTPS domain.
+4. Leave `TRUST_PROXY_HOPS` empty unless every request passes through trusted proxies that replace forwarded-IP headers. If the deployment guarantees one trusted proxy hop, set it to `1`.
+5. Expose the application port supplied through `PORT`.
+6. Use `/health` for liveness checks.
+7. Do not attach persistent storage for `.sessions` unless persistence is explicitly required and separately protected.
+8. Verify `POST /v1/profiles` through the public HTTPS domain.
 
 The repository excludes `.env`, `.sessions/`, and `node_modules/`. Never place real credentials in `.env.example`.
 
@@ -478,7 +498,7 @@ The repository excludes `.env`, `.sessions/`, and `node_modules/`. Never place r
 - `.env` and `.sessions/linkedin.json` contain credentials equivalent to an authenticated LinkedIn session.
 - The API response never intentionally includes cookie values or raw response headers.
 - The profile URL validator permits only canonical LinkedIn people-profile URLs; it does not act as a general URL fetcher.
-- The current repository does not include separate API-user authentication or a distributed rate limiter. Add an identity-aware gateway, OAuth, or equivalent protection before exposing it beyond a short controlled evaluation.
+- The profile routes do not require API-user authentication. A modest in-memory IP limiter protects the backend LinkedIn session during the controlled evaluation.
 - Revoke the LinkedIn session after the evaluation is complete.
 
 ## Known limitations
@@ -491,7 +511,9 @@ The repository excludes `.env`, `.sessions/`, and `node_modules/`. Never place r
 - A `partial` or `unavailable` section does not prove that the LinkedIn profile has no entries in that section.
 - Signed LinkedIn media URLs can expire.
 - Only one upstream profile request is allowed at a time. This reduces session pressure but limits throughput.
-- There is currently no shared cache, distributed session store, end-user authentication, or persistent distributed rate limiter.
+- Cached profiles can be up to 10 minutes old. They keep the original `meta.fetchedAt`, but each API response receives a new `meta.requestId`.
+- The cache and rate limiter are per process. They reset after a restart and are not shared across multiple replicas.
+- There is no distributed session store or end-user authentication.
 - Session cookies remain valuable credentials even when the session-state file is protected with filesystem permissions.
 
 ## Author
