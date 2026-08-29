@@ -541,6 +541,20 @@ For Railway or a comparable Node.js host:
 
 The repository excludes `.env`, `.sessions/`, and `node_modules/`. Never place real credentials in `.env.example`.
 
+### Session persistence trade-offs
+
+The four LinkedIn environment variables seed the session at startup. When LinkedIn sends valid cookie updates, the server-side jar applies them and saves the current state in `.sessions/linkedin.json`.
+
+| Deployment choice | Benefit | Trade-off |
+| --- | --- | --- |
+| Default ephemeral `.sessions` file | Reuses accepted cookie updates while that filesystem remains available, including a process restart that keeps the same filesystem. | A full redeployment or container replacement can remove the file. The next process then falls back to the original environment-variable values, which may be outdated. |
+| In-memory-only jar | Writes no session credential file to disk. | Requires disabling file persistence, and every process restart loses accepted cookie updates. |
+| Persistent volume | Keeps accepted cookie updates across redeployments and container replacements. | Stores valuable LinkedIn session credentials for longer and requires carefully restricted volume, backup, and operator access. |
+
+The default ephemeral option is used for this controlled assignment deployment. A mock session test confirmed that a surviving state file lets a new `SessionJar` instance reuse updated `li_at` and `JSESSIONID` values; the same test without a state file fell back to the old startup values. This verifies the application behavior, but it does not guarantee that a hosting platform preserves its ephemeral filesystem during redeployment.
+
+If the state file is lost and the original environment values are no longer accepted, capture all four values again from one successful Chrome Voyager request, update the deployment variables together, and restart the service.
+
 ## Security notes
 
 - `.env` and `.sessions/linkedin.json` contain credentials equivalent to an authenticated LinkedIn session.
