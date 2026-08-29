@@ -1,0 +1,37 @@
+{
+  "name": "profile-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browserless LinkedIn profile API using normalized Voyager JSON",
+  "main": "src/LinkedinClient.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "cli": "node --env-file-if-exists=.env src/cli.js"
+  },
+  "bin": {
+    "profile-api": "./src/cli.js"
+  },
+  "author": "Prajwal Chahande",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ph03iA/Profile-API.git"
+  },
+  "homepage": "https://github.com/ph03iA/Profile-API#readme",
+  "bugs": {
+    "url": "https://github.com/ph03iA/Profile-API/issues"
+  },
+  "keywords": [
+    "linkedin",
+    "profile",
+    "api",
+    "voyager",
+    "nodejs"
+  ]
+}

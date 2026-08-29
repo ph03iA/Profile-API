@@ -1,0 +1,7 @@
+node_modules/
+assets/debug.json
+config.js
+.env
+.env.*
+!.env.example
+.sessions/
