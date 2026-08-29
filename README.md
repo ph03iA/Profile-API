@@ -73,6 +73,8 @@ PORT=8080
 
 Use only a LinkedIn session that you own and are authorized to use. The values captured below are active credentials: anyone who obtains them may be able to use that LinkedIn session.
 
+Use **Google Chrome only** for this step. In our testing, using Brave caused the LinkedIn browser session to be logged out or replaced while the captured session was being used, possibly because of Brave Shields or its privacy protections. If you previously captured the values from Brave, sign in again with Chrome and capture every LinkedIn value from the same Chrome session. Do not mix cookie values from different browsers or login sessions.
+
 1. Sign in normally at `https://www.linkedin.com/`.
 2. Open `https://www.linkedin.com/feed/` and confirm the account is still signed in.
 3. Open Chrome DevTools with `F12` or `Ctrl+Shift+I`.

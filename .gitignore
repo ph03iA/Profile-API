@@ -5,3 +5,4 @@ config.js
 .env.*
 !.env.example
 .sessions/
+.deepsec/
