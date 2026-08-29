@@ -457,6 +457,19 @@ Versioned API errors use this shape:
 
 I kept the public API independent from LinkedIn's private response format by separating transport, graph reconstruction, and normalization:
 
+### Why I chose Voyager instead of RSC
+
+I evaluated two browserless ways to request profile data directly from LinkedIn:
+
+| Approach | What it returns | Trade-off |
+| --- | --- | --- |
+| RSC/SDUI | A React Server Components data stream used by LinkedIn's web interface | The stream is tied to internal UI components and actions. It needs a custom decoder, and the payload I evaluated did not reliably contain one complete profile. Details such as About and lazy-loaded sections could be absent or require separate actions. |
+| Voyager | Normalized JSON containing typed entities connected by URNs | The schema is still private and can change, but it is easier to validate, bound, reconstruct, and map into a stable API response. |
+
+I chose Voyager as the production transport because one expanded profile request provides the profile root plus linked experience, education, skills, certifications, languages, and image entities. Its JSON graph gives each entity a declared type and relationship, which lets the API avoid collecting unrelated records from the response. It also makes response-size limits, schema checks, pagination metadata, and upstream error handling more predictable.
+
+RSC was not rejected because it uses a browser—it can also be called directly over HTTP. I did not choose it as the primary transport because its Flight stream and internal component identifiers are more closely coupled to LinkedIn's frontend and were less consistent for full-profile extraction. Voyager can still return an incomplete paginated section; when that happens, this API returns the supported entries with `SECTION_PARTIAL` instead of claiming that the section is complete.
+
 1. **Validate the input.** The client parses the submitted URL and accepts only canonical LinkedIn people-profile URLs. This prevents arbitrary outbound requests and extracts the public profile identifier.
 2. **Build an authenticated browserless request.** The HTTP client calls LinkedIn's internal `identity/dash/profiles` Voyager endpoint using Node's built-in `fetch`. It supplies the matching cookie context, CSRF token, User-Agent, Rest.li protocol header, and profile decoration identifier.
 3. **Bound the upstream interaction.** The client enforces a timeout and maximum response size, follows no redirects, allows only one in-flight profile request, and honors LinkedIn throttling responses.
