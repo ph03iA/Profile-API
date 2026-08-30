@@ -151,6 +151,16 @@ memberIdentity=your-public-identifier
 
 8. Open **Headers** and locate **Request Headers**. Copy values locally using this mapping:
 
+Chrome may hide the `cookie` header because it is sensitive data. If it is not visible:
+
+0. Try Re-Trying it often shows up. If not then follow the next following steps.
+1. Press `F1` in DevTools.
+2. Open **Preferences** > **Network** and enable **Allow to generate HAR with sensitive data**.
+3. Return to **Network**, filter the list so only the successful profile request is shown, and right-click it.
+4. Select **Copy** > **Copy all listed as HAR (with sensitive data)**.
+5. Paste the result into a temporary local file, find the header whose name is `cookie`, and copy its complete value.
+6. Delete the temporary file immediately after updating `.env` or the deployment variables. Never upload or share the HAR because it contains the active LinkedIn session.
+
 | DevTools request value | `.env` variable | What to copy |
 | --- | --- | --- |
 | `cookie` | `LINKEDIN_COOKIE_HEADER` | The entire header value, containing every semicolon-separated cookie. Do not include the `cookie:` label. |
@@ -175,7 +185,7 @@ Important:
 - Keep the complete cookie header on one `.env` line and wrap it in single quotes.
 - Do not paste real values into the README, GitHub, chat, screenshots, logs, or API requests.
 - Do not log out of LinkedIn after capturing the values; logging out revokes the session. Closing the browser without logging out is fine.
-- If the backend reports a rejected or unavailable session, sign in normally again and replace all four values from a new successful request.
+- If the backend reports a rejected or unavailable session, first compare the deployment values with a new successful Chrome request. Replace only the values that changed, while keeping every value from the same browser session.
 
 ### 4. Start the API
 
@@ -251,7 +261,7 @@ At runtime:
 4. Valid LinkedIn `Set-Cookie` responses update the bounded jar.
 5. Updated state is stored in `.sessions/linkedin.json`, which is ignored by Git and created with restrictive filesystem permissions.
 6. Redirects, HTML login/checkpoint responses, authentication-cookie deletion, and rejected sessions stop extraction and return a controlled session error. The backend does not repeatedly retry a rejected session.
-7. When operator action is required, all four environment values must be replaced from a new successful browser request and the service restarted.
+7. When operator action is required, compare against a new successful browser request, replace the values that changed, and restart the service. If `li_at` or `JSESSIONID` changed, replace those variables and the complete cookie header together.
 
 ### Security boundary
 
@@ -571,6 +581,24 @@ The default ephemeral option is used for this controlled assignment deployment. 
 
 If the state file is lost and the original environment values are no longer accepted, capture all four values again from one successful Chrome Voyager request, update the deployment variables together, and restart the service.
 
+### Cookie changes after deployment
+
+LinkedIn can change auxiliary cookies such as `bcookie`, `bscookie`, or `lidc` without changing `li_at` or `JSESSIONID`. When this happens, the Voyager request can still return `200` in Chrome while an older deployed `LINKEDIN_COOKIE_HEADER` is redirected or rejected. The API then returns `LINKEDIN_SESSION_UNAVAILABLE` even though the two separate authentication variables still look correct.
+
+The server processes `Set-Cookie` updates that LinkedIn sends directly to the server and saves accepted updates in `.sessions/linkedin.json`. It cannot see cookie changes that happened only inside Chrome because Chrome and the deployed Railway container have separate cookie stores.
+
+To recover:
+
+1. Stop the local API so the same LinkedIn session is not being used simultaneously from the local machine and Railway.
+2. Run a successful Voyager request in Chrome and confirm that its status is `200`.
+3. If `li_at` and `JSESSIONID` are unchanged but the complete cookie header changed, update only `LINKEDIN_COOKIE_HEADER` in Railway. Keep `LINKEDIN_USER_AGENT` unchanged unless Chrome's User-Agent also changed.
+4. If `li_at` or `JSESSIONID` changed, update those variables and `LINKEDIN_COOKIE_HEADER` together from that same successful request.
+5. Redeploy or restart the Railway service so it reads the new values, then make one profile request.
+
+If the saved session is already marked invalid, changing only `LINKEDIN_COOKIE_HEADER` and restarting does not reset it: the saved-session fingerprint uses `li_at` and `JSESSIONID`. In that case, provide a fresh authentication pair and the matching complete cookie header.
+
+Do not manufacture a new value or copy cookies from different browser sessions. In Railway, paste the raw header value without the `cookie:` label or outer quotes.
+
 ## Security notes
 
 - `.env` and `.sessions/linkedin.json` contain credentials equivalent to an authenticated LinkedIn session.
@@ -582,7 +610,10 @@ If the state file is lost and the original environment values are no longer acce
 ## Known limitations
 
 - Voyager is a private, undocumented LinkedIn interface. Its endpoint, decoration identifier, headers, and graph schema can change without notice.
+- Skills may be incomplete. The API returns only the skills embedded in the first Voyager profile response; it does not fetch additional skills pages. For example, a profile with 27 skills may return 20. This is an observed example, not a fixed 20-skill limit.
+- When paging metadata shows that skills are missing, `meta.sectionStatus.skills` is `partial` and `meta.warnings` includes `SECTION_PARTIAL`. Do not treat `skills.length` as the profile's full skill count.
 - The implementation depends on a valid backend LinkedIn session and matching browser-cookie context.
+- Auxiliary browser cookies can change independently of `li_at` and `JSESSIONID`; a deployment may require a refreshed `LINKEDIN_COOKIE_HEADER` even when those two values remain unchanged.
 - Expired cookies, CAPTCHA, checkpoints, account restrictions, and security verification require manual owner action.
 - Profile visibility and relationship settings determine which fields the backend session can see.
 - Only LinkedIn people-profile URLs are supported; company and organization pages are rejected.
