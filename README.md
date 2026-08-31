@@ -610,8 +610,8 @@ Do not manufacture a new value or copy cookies from different browser sessions. 
 ## Known limitations
 
 - Voyager is a private, undocumented LinkedIn interface. Its endpoint, decoration identifier, headers, and graph schema can change without notice.
-- Skills may be incomplete. The API returns only the skills embedded in the first Voyager profile response; it does not fetch additional skills pages. For example, a profile with 27 skills may return 20. This is an observed example, not a fixed 20-skill limit.
-- When paging metadata shows that skills are missing, `meta.sectionStatus.skills` is `partial` and `meta.warnings` includes `SECTION_PARTIAL`. Do not treat `skills.length` as the profile's full skill count.
+- Skills pagination is attempted when Voyager reports a trustworthy total larger than the embedded first page. The API then calls LinkedIn's browserless RSC/SDUI skills pager directly, validates every page, and marks skills `complete` only when the reported total is reconstructed.
+- There is no artificial 20-skill limit. The client follows the total reported by LinkedIn until every page is read. Safety limits still apply to each page (1 MiB), the combined pagination response (4 MiB), and the overall request timeout. If LinkedIn changes the pager format, a page is missing/malformed, the request times out, or the session cannot fetch the optional pages, the API safely returns the embedded Voyager skills with `meta.sectionStatus.skills: partial` and a `SECTION_PARTIAL` warning. Do not treat `skills.length` as the profile's full count unless the section status is `complete`.
 - The implementation depends on a valid backend LinkedIn session and matching browser-cookie context.
 - Auxiliary browser cookies can change independently of `li_at` and `JSESSIONID`; a deployment may require a refreshed `LINKEDIN_COOKIE_HEADER` even when those two values remain unchanged.
 - Expired cookies, CAPTCHA, checkpoints, account restrictions, and security verification require manual owner action.
