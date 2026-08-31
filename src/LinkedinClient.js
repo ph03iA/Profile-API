@@ -66,7 +66,12 @@ module.exports = class LinkedinClient {
 		const target = canonicalizeProfileUrl(value);
 		try {
 			const response = await this.http.readProfile(target.publicIdentifier);
-			return normalizeVoyagerProfile(response.payload, target, response.fetchedAt);
+			return normalizeVoyagerProfile(
+				response.payload,
+				target,
+				response.fetchedAt,
+				response.skillsSupplement
+			);
 		} catch (error) {
 			if (error && error.code === 'PROFILE_NOT_FOUND')
 				return null;

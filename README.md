@@ -527,7 +527,7 @@ I evaluated two browserless ways to request profile data directly from LinkedIn:
 
 I chose Voyager as the production transport because one expanded profile request provides the profile root plus linked experience, education, skills, certifications, languages, and image entities. Its JSON graph gives each entity a declared type and relationship, which lets the API avoid collecting unrelated records from the response. It also makes response-size limits, schema checks, pagination metadata, and upstream error handling more predictable.
 
-RSC was not rejected because it uses a browser—it can also be called directly over HTTP. I did not choose it as the primary transport because its Flight stream and internal component identifiers are more closely coupled to LinkedIn's frontend and were less consistent for full-profile extraction. Voyager can still return an incomplete paginated section; when that happens, this API returns the supported entries with `SECTION_PARTIAL` instead of claiming that the section is complete.
+RSC was not rejected because it uses a browser—it can also be called directly over HTTP. I did not choose it as the primary full-profile transport because its Flight stream and internal component identifiers are more closely coupled to LinkedIn's frontend. The API uses it only to fetch additional skills pages when Voyager reports that more skills are available.
 
 1. **Validate the input.** The client parses the submitted URL and accepts only canonical LinkedIn people-profile URLs. This prevents arbitrary outbound requests and extracts the public profile identifier.
 2. **Build an authenticated browserless request.** The HTTP client calls LinkedIn's internal `identity/dash/profiles` Voyager endpoint using Node's built-in `fetch`. It supplies the matching cookie context, CSRF token, User-Agent, Rest.li protocol header, and profile decoration identifier.
@@ -610,8 +610,6 @@ Do not manufacture a new value or copy cookies from different browser sessions. 
 ## Known limitations
 
 - Voyager is a private, undocumented LinkedIn interface. Its endpoint, decoration identifier, headers, and graph schema can change without notice.
-- Skills may be incomplete. The API returns only the skills embedded in the first Voyager profile response; it does not fetch additional skills pages. For example, a profile with 27 skills may return 20. This is an observed example, not a fixed 20-skill limit.
-- When paging metadata shows that skills are missing, `meta.sectionStatus.skills` is `partial` and `meta.warnings` includes `SECTION_PARTIAL`. Do not treat `skills.length` as the profile's full skill count.
 - The implementation depends on a valid backend LinkedIn session and matching browser-cookie context.
 - Auxiliary browser cookies can change independently of `li_at` and `JSESSIONID`; a deployment may require a refreshed `LINKEDIN_COOKIE_HEADER` even when those two values remain unchanged.
 - Expired cookies, CAPTCHA, checkpoints, account restrictions, and security verification require manual owner action.

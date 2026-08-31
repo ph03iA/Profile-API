@@ -276,8 +276,7 @@ function inspectProfileSkills(root, graph) {
         state: collection.complete && entriesComplete ? 'complete' : 'partial',
         paging,
         paginationEligible: entriesComplete && returnedCount > 0 && values.length === returnedCount &&
-            paging !== null && paging.start === 0 && paging.count >= returnedCount &&
-            paging.total > returnedCount && paging.total <= maximumSectionEntries,
+            paging !== null && paging.start === 0 && paging.total > returnedCount,
     };
 }
 function readFlatSection(root, field, type, graph, parse) {
